@@ -4,7 +4,71 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OnPoint Group Bank Dashboard</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f5f7fb;color:#0f172a}
+    .app{min-height:100vh;display:flex}
+    .sidebar{width:290px;background:linear-gradient(180deg,#0f172a,#111827);color:#fff;padding:28px;display:flex;flex-direction:column;gap:32px}
+    .brand{display:flex;gap:14px;align-items:center}
+    .logo{width:48px;height:48px;border-radius:16px;background:#2563eb;display:grid;place-items:center;font-weight:800}
+    .brand h1{font-size:20px;margin:0 0 4px}
+    .brand p,.sidebar-footer p{margin:0;color:#cbd5e1;font-size:13px}
+    nav{display:grid;gap:10px}
+    .nav-btn{border:0;border-radius:12px;padding:13px 15px;background:rgba(255,255,255,.08);color:#e5e7eb;text-align:left;cursor:pointer;font-size:15px}
+    .nav-btn.active,.nav-btn:hover{background:#2563eb;color:#fff}
+    .sidebar-footer{margin-top:auto;padding:16px;border-radius:16px;background:rgba(255,255,255,.08)}
+    .main{flex:1;padding:30px;overflow-x:hidden}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+    .eyebrow{color:#2563eb;font-weight:700;margin:0 0 6px;text-transform:uppercase;font-size:12px;letter-spacing:.08em}
+    .topbar h2{font-size:30px;margin:0}
+    .actions{display:flex;gap:12px;flex-wrap:wrap}
+    .upload-btn,.secondary-btn,.lookup button{border:0;border-radius:12px;padding:13px 18px;font-weight:700;cursor:pointer}
+    .upload-btn{background:#2563eb;color:white}
+    .upload-btn input{display:none}
+    .secondary-btn{background:white;color:#0f172a;border:1px solid #e5e7eb}
+    .status-card{margin-bottom:20px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:14px 16px;border-radius:14px}
+    .status-card.error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+    .status-card.success{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+    .cards{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:18px;margin-bottom:20px}
+    .card,.panel{background:white;border-radius:18px;box-shadow:0 12px 30px rgba(15,23,42,.06);border:1px solid #eef2f7}
+    .card{padding:22px}
+    .card span{color:#64748b;font-size:14px}
+    .card strong{display:block;margin-top:10px;font-size:26px}
+    .card.highlight{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:white}
+    .card.highlight span{color:#dbeafe}
+    .grid{display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+    .panel{padding:22px;margin-bottom:20px}
+    .panel-header{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px}
+    .panel h3{margin:0 0 5px;font-size:20px}
+    .panel p{margin:0;color:#64748b;font-size:14px}
+    .lookup{display:flex;gap:10px}
+    .lookup input{border:1px solid #d1d5db;border-radius:12px;padding:12px}
+    .lookup button{background:#0f172a;color:white}
+    .bank-card{border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;margin-bottom:14px}
+    .bank-header{padding:18px;background:#f8fafc;display:flex;justify-content:space-between;gap:16px;cursor:pointer}
+    .bank-header h4{margin:0 0 5px}
+    .bank-header p{margin:0;color:#64748b}
+    .bank-balance{font-weight:800;font-size:18px;white-space:nowrap}
+    .bank-details{display:none;padding:18px;background:white}
+    .bank-details.show{display:block}
+    .detail-row{display:flex;justify-content:space-between;border-bottom:1px solid #eef2f7;padding:10px 0;gap:12px}
+    .detail-row:last-child{border-bottom:0}
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:13px 10px;border-bottom:1px solid #eef2f7;text-align:left;font-size:14px}
+    th{color:#475569;background:#f8fafc}
+    .empty{color:#64748b;text-align:center}
+    .history-results{display:grid;gap:10px}
+    .history-item{border:1px solid #e5e7eb;padding:13px;border-radius:12px;display:flex;justify-content:space-between;gap:12px}
+    .view{display:none}
+    .view.active-view{display:block}
+    .report-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:16px}
+    .report-card{background:#f8fafc;border:1px solid #e5e7eb;border-radius:16px;padding:18px}
+    .report-card span{display:block;color:#64748b;font-size:13px;margin-bottom:8px}
+    .report-card strong{font-size:22px}
+    .section-title{margin:0 0 16px;font-size:22px}
+    @media(max-width:980px){.app{flex-direction:column}.sidebar{width:100%}.cards,.grid{grid-template-columns:1fr}.topbar,.panel-header{align-items:flex-start;flex-direction:column}}
+  </style>
 
   <!-- PDF text extraction -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -24,10 +88,10 @@
       </div>
 
       <nav>
-        <button class="nav-btn active">Dashboard</button>
-        <button class="nav-btn">Bank Accounts</button>
-        <button class="nav-btn">Transactions</button>
-        <button class="nav-btn">Reports</button>
+        <button class="nav-btn active" data-view="dashboardView">Dashboard</button>
+        <button class="nav-btn" data-view="accountsView">Bank Accounts</button>
+        <button class="nav-btn" data-view="transactionsView">Transactions</button>
+        <button class="nav-btn" data-view="reportsView">Reports</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -57,6 +121,7 @@
         Ready. Upload a PDF, CSV, or Excel bank statement.
       </section>
 
+      <div id="dashboardView" class="view active-view">
       <section class="cards">
         <div class="card">
           <span>Total Banks</span>
@@ -135,9 +200,581 @@
           </div>
         </section>
       </section>
+      </div>
+
+      <div id="accountsView" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="section-title">Bank Accounts</h3>
+              <p>All bank accounts loaded from the Google Sheet named Bank.</p>
+            </div>
+          </div>
+          <div id="accountsContainer"></div>
+        </section>
+      </div>
+
+      <div id="transactionsView" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="section-title">Transactions</h3>
+              <p>Full upload history and running balances from uploaded bank statements.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Upload Date</th>
+                  <th>Statement Date</th>
+                  <th>Bank</th>
+                  <th>Account</th>
+                  <th>Holder</th>
+                  <th>Description</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
+              <tbody id="allTransactionsTable">
+                <tr>
+                  <td colspan="7" class="empty">No data loaded yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="reportsView" class="view">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3 class="section-title">Reports</h3>
+              <p>Summary reports generated from the uploaded bank statement records.</p>
+            </div>
+          </div>
+
+          <div class="report-grid">
+            <div class="report-card">
+              <span>Total Banks</span>
+              <strong id="reportBanks">0</strong>
+            </div>
+            <div class="report-card">
+              <span>Total Accounts</span>
+              <strong id="reportAccounts">0</strong>
+            </div>
+            <div class="report-card">
+              <span>Total Consolidated Balance</span>
+              <strong id="reportBalance">R 0.00</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Bank Summary</h3>
+              <p>Balances grouped by bank.</p>
+            </div>
+          </div>
+          <div id="reportBankSummary"></div>
+        </section>
+      </div>
     </main>
   </div>
 
-  <script src="script.js"></script>
+  <script>
+    const SPREADSHEET_ID = "1UQGbv8dZcvOzshC5AimrZC7dFr6QdyxkUrh2JP-kitQ";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw8yDKncqxjgImCaq3A8FY7zkt_xZg9JPgBAz6xvfNKACacK_eaoGXReQ_pYoaxV8g/exec";
+
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+    }
+
+    const fileInput = document.getElementById("fileInput");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const lookupBtn = document.getElementById("lookupBtn");
+    const statusBox = document.getElementById("statusBox");
+    let records = [];
+
+    document.querySelectorAll(".nav-btn").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
+        button.classList.add("active");
+
+        document.querySelectorAll(".view").forEach(view => view.classList.remove("active-view"));
+        document.getElementById(button.dataset.view).classList.add("active-view");
+
+        renderDashboard();
+      });
+    });
+
+    fileInput.addEventListener("change", handleUpload);
+    refreshBtn.addEventListener("click", loadSheetData);
+    lookupBtn.addEventListener("click", lookupBalanceByDate);
+
+    function setStatus(message, type = "") {
+      statusBox.className = "status-card";
+      if (type) statusBox.classList.add(type);
+      statusBox.textContent = message;
+    }
+
+    async function handleUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        setStatus("Reading statement...");
+        const text = await extractText(file);
+        const parsed = parseStatement(text, file.name);
+
+        setStatus("Saving extracted statement data to Google Sheet named Bank...");
+
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "append",
+            spreadsheetId: SPREADSHEET_ID,
+            sheetName: "Bank",
+            ...parsed
+          })
+        });
+
+        const resultText = await response.text();
+        let result;
+
+        try {
+          result = JSON.parse(resultText);
+        } catch {
+          throw new Error("Apps Script did not return JSON. Response: " + resultText);
+        }
+
+        if (!result.success) {
+          throw new Error(result.error || "Google Sheet save failed.");
+        }
+
+        records.unshift(result.record || parsed);
+        renderDashboard();
+        setStatus("Upload saved successfully to Google Sheet named Bank.", "success");
+        fileInput.value = "";
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function extractText(file) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (ext === "pdf") return extractPdfText(file);
+      if (ext === "csv") return await file.text();
+      if (ext === "xlsx" || ext === "xls") return extractExcelText(file);
+      throw new Error("Unsupported file type. Please upload PDF, CSV, XLS, or XLSX.");
+    }
+
+    async function extractPdfText(file) {
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument(new Uint8Array(buffer)).promise;
+      let fullText = "";
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        fullText += content.items.map(item => item.str).join(" ") + "\n";
+      }
+
+      return fullText;
+    }
+
+    async function extractExcelText(file) {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      let text = "";
+
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        text += XLSX.utils.sheet_to_csv(sheet) + "\n";
+      });
+
+      return text;
+    }
+
+    function parseStatement(text, fileName) {
+      const cleanText = text.replace(/\s+/g, " ").trim();
+      const upper = cleanText.toUpperCase();
+      const bankName = detectBank(upper);
+      const accountHolder = detectAccountHolder(cleanText);
+      const accountNumber = detectAccountNumber(cleanText);
+      const statementDate = detectStatementDate(cleanText);
+      const balance = detectClosingBalance(cleanText);
+
+      return {
+        uploadId: "UPL-" + Date.now(),
+        uploadedAt: new Date().toISOString(),
+        fileName,
+        bankName,
+        accountHolder,
+        accountNumber,
+        statementDate,
+        transactionDate: statementDate,
+        description: "Statement upload",
+        debit: "",
+        credit: "",
+        runningBalance: balance,
+        closingBalance: balance,
+        currency: "ZAR"
+      };
+    }
+
+    function detectBank(upperText) {
+      const banks = [
+        ["STANDARD BANK", "Standard Bank"],
+        ["FIRST NATIONAL BANK", "FNB"],
+        ["FNB", "FNB"],
+        ["NEDBANK", "Nedbank"],
+        ["ABSA", "ABSA"],
+        ["CAPITEC", "Capitec"],
+        ["INVESTEC", "Investec"],
+        ["TYMEBANK", "TymeBank"],
+        ["AFRICAN BANK", "African Bank"]
+      ];
+      const match = banks.find(([keyword]) => upperText.includes(keyword));
+      return match ? match[1] : "Unknown Bank";
+    }
+
+    function detectAccountHolder(text) {
+      const patterns = [
+        /account\s*holder[:\s]+([A-Z0-9 &().,'/-]{3,80})/i,
+        /account\s*name[:\s]+([A-Z0-9 &().,'/-]{3,80})/i,
+        /name[:\s]+([A-Z0-9 &().,'/-]{3,80})/i
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) return cleanField(match[1]);
+      }
+
+      if (/ON\s*POINT|ONPOINT/i.test(text)) return "OnPoint Group";
+      return "OnPoint Group";
+    }
+
+    function detectAccountNumber(text) {
+      const patterns = [
+        /account\s*(number|no|num)[:\s]*([0-9 -]{6,20})/i,
+        /acc\s*(number|no|num)[:\s]*([0-9 -]{6,20})/i
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[2]) return match[2].replace(/\D/g, "");
+      }
+
+      const fallback = text.match(/\b\d{8,13}\b/);
+      return fallback ? fallback[0] : "Unknown";
+    }
+
+    function detectStatementDate(text) {
+      const isoDate = text.match(/\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b/);
+      if (isoDate) return normalizeDate(isoDate[0]);
+
+      const date = text.match(/\b(0?[1-9]|[12]\d|3[01])[-/](0?[1-9]|1[0-2])[-/](20\d{2})\b/);
+      if (date) return normalizeDate(date[0]);
+
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function detectClosingBalance(text) {
+      const balancePatterns = [
+        /closing\s*balance[:\s-]*R?\s*([+-]?\d[\d,\s]*\.\d{2})/i,
+        /available\s*balance[:\s-]*R?\s*([+-]?\d[\d,\s]*\.\d{2})/i,
+        /balance[:\s-]*R?\s*([+-]?\d[\d,\s]*\.\d{2})/i
+      ];
+
+      for (const pattern of balancePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) return numberString(match[1]);
+      }
+
+      const amounts = text.match(/[+-]?\d{1,3}(?:[,\s]\d{3})*\.\d{2}/g);
+      if (!amounts || amounts.length === 0) return "0.00";
+      return numberString(amounts[amounts.length - 1]);
+    }
+
+    function cleanField(value) {
+      return value.replace(/account|number|statement|date|balance/gi, "").replace(/\s{2,}/g, " ").trim().slice(0, 80);
+    }
+
+    function numberString(value) {
+      const cleaned = String(value).replace(/\s/g, "").replace(/,/g, "");
+      const parsed = parseFloat(cleaned);
+      return Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00";
+    }
+
+    function normalizeDate(value) {
+      const parts = value.replace(/\//g, "-").split("-").map(Number);
+
+      if (String(parts[0]).length === 4) {
+        const [y, m, d] = parts;
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+
+      const [d, m, y] = parts;
+      return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    async function loadSheetData() {
+      try {
+        setStatus("Loading existing data from Google Sheet named Bank...");
+        const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=list&sheetName=Bank`);
+        const result = await response.json();
+
+        if (!result.success) throw new Error(result.error || "Could not load sheet data.");
+
+        records = result.records || [];
+        renderDashboard();
+        setStatus("Sheet data loaded successfully from Bank.", "success");
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message, "error");
+      }
+    }
+
+    async function lookupBalanceByDate() {
+      const date = document.getElementById("historyDate").value;
+
+      if (!date) {
+        setStatus("Please choose a date for balance lookup.", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=balanceByDate&sheetName=Bank&date=${encodeURIComponent(date)}`);
+        const result = await response.json();
+
+        if (!result.success) throw new Error(result.error || "Lookup failed.");
+        renderHistoryResults(date, result.records || []);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message, "error");
+      }
+    }
+
+    function renderDashboard() {
+      const banks = new Set(records.map(r => r.bankName).filter(Boolean));
+      const accounts = new Set(records.map(r => `${r.bankName}-${r.accountNumber}`).filter(Boolean));
+      const latestByAccount = {};
+
+      records.forEach(record => {
+        const key = `${record.bankName}-${record.accountNumber}`;
+        const dateValue = new Date(record.statementDate || record.uploadedAt || 0).getTime();
+
+        if (!latestByAccount[key] || dateValue >= latestByAccount[key]._dateValue) {
+          latestByAccount[key] = { ...record, _dateValue: dateValue };
+        }
+      });
+
+      const latestRecords = Object.values(latestByAccount);
+      const total = latestRecords.reduce((sum, r) => sum + (parseFloat(r.runningBalance || r.closingBalance || 0) || 0), 0);
+
+      document.getElementById("totalBanks").textContent = banks.size;
+      document.getElementById("totalAccounts").textContent = accounts.size;
+      document.getElementById("consolidatedBalance").textContent = formatCurrency(total);
+      document.getElementById("lastUpload").textContent = records[0]?.uploadedAt ? new Date(records[0].uploadedAt).toLocaleDateString() : "-";
+
+      renderBanks(latestRecords);
+      renderTransactions(records.slice(0, 12));
+      renderAccounts(latestRecords);
+      renderAllTransactions(records);
+      renderReports(latestRecords);
+    }
+
+    function renderBanks(latestRecords) {
+      const container = document.getElementById("banksContainer");
+      container.innerHTML = "";
+
+      if (latestRecords.length === 0) {
+        container.innerHTML = `<p class="empty">No accounts available yet.</p>`;
+        return;
+      }
+
+      const grouped = {};
+
+      latestRecords.forEach(record => {
+        if (!grouped[record.bankName]) grouped[record.bankName] = [];
+        grouped[record.bankName].push(record);
+      });
+
+      Object.entries(grouped).forEach(([bankName, accounts], index) => {
+        const total = accounts.reduce((sum, r) => sum + (parseFloat(r.runningBalance || r.closingBalance || 0) || 0), 0);
+        const card = document.createElement("div");
+        card.className = "bank-card";
+
+        card.innerHTML = `
+          <div class="bank-header" onclick="toggleBank(${index})">
+            <div>
+              <h4>${bankName}</h4>
+              <p>${accounts.length} account(s)</p>
+            </div>
+            <div class="bank-balance">${formatCurrency(total)}</div>
+          </div>
+          <div class="bank-details" id="bank-${index}">
+            ${accounts.map(account => `
+              <div class="detail-row"><span>Account Holder</span><strong>${account.accountHolder || "Unknown"}</strong></div>
+              <div class="detail-row"><span>Account Number</span><strong>${account.accountNumber || "Unknown"}</strong></div>
+              <div class="detail-row"><span>Statement Date</span><strong>${account.statementDate || "-"}</strong></div>
+              <div class="detail-row"><span>Running Balance</span><strong>${formatCurrency(account.runningBalance || account.closingBalance || 0)}</strong></div>
+              <br>
+            `).join("")}
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function toggleBank(index) {
+      document.getElementById(`bank-${index}`).classList.toggle("show");
+    }
+
+
+    function renderAccounts(latestRecords) {
+      const container = document.getElementById("accountsContainer");
+      if (!container) return;
+
+      if (!latestRecords.length) {
+        container.innerHTML = `<p class="empty">No bank accounts available yet.</p>`;
+        return;
+      }
+
+      container.innerHTML = latestRecords.map((account, index) => `
+        <div class="bank-card">
+          <div class="bank-header" onclick="toggleAccountDetails(${index})">
+            <div>
+              <h4>${account.bankName || "Unknown Bank"}</h4>
+              <p>${account.accountHolder || "Unknown Holder"}</p>
+            </div>
+            <div class="bank-balance">${formatCurrency(account.runningBalance || account.closingBalance || 0)}</div>
+          </div>
+          <div class="bank-details" id="account-detail-${index}">
+            <div class="detail-row"><span>Account Number</span><strong>${account.accountNumber || "Unknown"}</strong></div>
+            <div class="detail-row"><span>Statement Date</span><strong>${account.statementDate || "-"}</strong></div>
+            <div class="detail-row"><span>Upload Date</span><strong>${account.uploadedAt ? new Date(account.uploadedAt).toLocaleString() : "-"}</strong></div>
+            <div class="detail-row"><span>Currency</span><strong>${account.currency || "ZAR"}</strong></div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function toggleAccountDetails(index) {
+      document.getElementById(`account-detail-${index}`).classList.toggle("show");
+    }
+
+    function renderAllTransactions(rows) {
+      const table = document.getElementById("allTransactionsTable");
+      if (!table) return;
+
+      if (!rows.length) {
+        table.innerHTML = `<tr><td colspan="7" class="empty">No data loaded yet.</td></tr>`;
+        return;
+      }
+
+      table.innerHTML = rows.map(row => `
+        <tr>
+          <td>${row.uploadedAt ? new Date(row.uploadedAt).toLocaleDateString() : "-"}</td>
+          <td>${row.statementDate || row.transactionDate || "-"}</td>
+          <td>${row.bankName || "-"}</td>
+          <td>${row.accountNumber || "-"}</td>
+          <td>${row.accountHolder || "-"}</td>
+          <td>${row.description || "Statement upload"}</td>
+          <td>${formatCurrency(row.runningBalance || row.closingBalance || 0)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderReports(latestRecords) {
+      const reportBanks = document.getElementById("reportBanks");
+      const reportAccounts = document.getElementById("reportAccounts");
+      const reportBalance = document.getElementById("reportBalance");
+      const reportBankSummary = document.getElementById("reportBankSummary");
+
+      if (!reportBanks || !reportAccounts || !reportBalance || !reportBankSummary) return;
+
+      const banks = new Set(latestRecords.map(r => r.bankName).filter(Boolean));
+      const accounts = new Set(latestRecords.map(r => `${r.bankName}-${r.accountNumber}`).filter(Boolean));
+      const total = latestRecords.reduce((sum, r) => sum + (parseFloat(r.runningBalance || r.closingBalance || 0) || 0), 0);
+
+      reportBanks.textContent = banks.size;
+      reportAccounts.textContent = accounts.size;
+      reportBalance.textContent = formatCurrency(total);
+
+      const grouped = {};
+
+      latestRecords.forEach(record => {
+        const bank = record.bankName || "Unknown Bank";
+        if (!grouped[bank]) grouped[bank] = { count: 0, total: 0 };
+        grouped[bank].count += 1;
+        grouped[bank].total += parseFloat(record.runningBalance || record.closingBalance || 0) || 0;
+      });
+
+      const entries = Object.entries(grouped);
+
+      if (!entries.length) {
+        reportBankSummary.innerHTML = `<p class="empty">No report data available yet.</p>`;
+        return;
+      }
+
+      reportBankSummary.innerHTML = entries.map(([bank, summary]) => `
+        <div class="history-item">
+          <div>
+            <strong>${bank}</strong><br>
+            <span>${summary.count} account(s)</span>
+          </div>
+          <strong>${formatCurrency(summary.total)}</strong>
+        </div>
+      `).join("");
+    }
+
+
+    function renderTransactions(rows) {
+      const table = document.getElementById("transactionsTable");
+
+      if (!rows.length) {
+        table.innerHTML = `<tr><td colspan="5" class="empty">No data loaded yet.</td></tr>`;
+        return;
+      }
+
+      table.innerHTML = rows.map(row => `
+        <tr>
+          <td>${row.statementDate || row.transactionDate || "-"}</td>
+          <td>${row.bankName || "-"}</td>
+          <td>${row.accountNumber || "-"}</td>
+          <td>${row.accountHolder || "-"}</td>
+          <td>${formatCurrency(row.runningBalance || row.closingBalance || 0)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderHistoryResults(date, rows) {
+      const container = document.getElementById("historyResults");
+
+      if (!rows.length) {
+        container.innerHTML = `<p class="empty">No balances found for ${date}.</p>`;
+        return;
+      }
+
+      container.innerHTML = rows.map(row => `
+        <div class="history-item">
+          <div><strong>${row.bankName}</strong><br><span>${row.accountHolder} - ${row.accountNumber}</span></div>
+          <strong>${formatCurrency(row.runningBalance || row.closingBalance || 0)}</strong>
+        </div>
+      `).join("");
+    }
+
+    function formatCurrency(value) {
+      const number = parseFloat(value || 0) || 0;
+      return number.toLocaleString("en-ZA", { style: "currency", currency: "ZAR" });
+    }
+
+    window.addEventListener("load", loadSheetData);
+  </script>
 </body>
 </html>
