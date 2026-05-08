@@ -68,6 +68,16 @@
     .report-card strong{font-size:22px}
     .section-title{margin:0 0 16px;font-size:22px}
     @media(max-width:980px){.app{flex-direction:column}.sidebar{width:100%}.cards,.grid{grid-template-columns:1fr}.topbar,.panel-header{align-items:flex-start;flex-direction:column}}
+
+    .login-overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .login-box{width:100%;max-width:420px;background:#fff;padding:32px;border-radius:22px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+    .login-box h2{margin:0 0 8px;font-size:28px;color:#0f172a}
+    .login-box p{margin:0 0 22px;color:#64748b}
+    .login-form{display:grid;gap:16px}
+    .login-form input{padding:14px;border:1px solid #d1d5db;border-radius:14px;font-size:15px}
+    .login-form button{border:0;background:#2563eb;color:#fff;padding:14px;border-radius:14px;font-weight:700;cursor:pointer}
+    .login-error{margin-top:14px;color:#b91c1c;font-size:14px;text-align:center}
+
   </style>
 
   <!-- PDF text extraction -->
@@ -77,6 +87,22 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
+
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Secure Login</h2>
+      <p>Sign in to access the OnPoint Group Bank Dashboard.</p>
+
+      <form class="login-form" id="loginForm">
+        <input type="text" id="loginUsername" placeholder="Username" required />
+        <input type="password" id="loginPassword" placeholder="Password" required />
+        <button type="submit">Login</button>
+      </form>
+
+      <div class="login-error" id="loginError"></div>
+    </div>
+  </div>
+
   <div class="app">
     <aside class="sidebar">
       <div class="brand">
@@ -296,6 +322,65 @@
     const lookupBtn = document.getElementById("lookupBtn");
     const statusBox = document.getElementById("statusBox");
     let records = [];
+
+    const loginOverlay = document.getElementById("loginOverlay");
+    const loginForm = document.getElementById("loginForm");
+    const loginError = document.getElementById("loginError");
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value.trim();
+
+      if (!username || !password) {
+        loginError.textContent = "Enter username and password.";
+        return;
+      }
+
+      loginError.textContent = "Authenticating...";
+
+      try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "append",
+            spreadsheetId: SPREADSHEET_ID,
+            sheetName: "login",
+            username,
+            password,
+            loginTime: new Date().toISOString()
+          })
+        });
+
+        const resultText = await response.text();
+        let result;
+
+        try {
+          result = JSON.parse(resultText);
+        } catch {
+          result = { success: true };
+        }
+
+        if (result.success === false) {
+          throw new Error(result.error || "Login failed.");
+        }
+
+        sessionStorage.setItem("onpointLoggedIn", "true");
+        sessionStorage.setItem("onpointUser", username);
+
+        loginOverlay.style.display = "none";
+        setStatus(`Welcome ${username}. Login saved to Google Sheet tab: login.`, "success");
+      } catch (error) {
+        console.error(error);
+        loginError.textContent = error.message || "Unable to login.";
+      }
+    });
+
+    if (sessionStorage.getItem("onpointLoggedIn") === "true") {
+      loginOverlay.style.display = "none";
+    }
+
 
     document.querySelectorAll(".nav-btn").forEach(button => {
       button.addEventListener("click", () => {
