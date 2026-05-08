@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OnPoint Group Bank Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+  <!-- Excel/CSV support -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">OP</div>
+        <div>
+          <h1>OnPoint Group</h1>
+          <p>71 Pretorious Road, Midrand</p>
+        </div>
+      </div>
+
+      <nav>
+        <button class="nav-btn active">Dashboard</button>
+        <button class="nav-btn">Bank Accounts</button>
+        <button class="nav-btn">Transactions</button>
+        <button class="nav-btn">Reports</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <p>Google Sheet</p>
+        <strong>Bank</strong>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Treasury Management</p>
+          <h2>Bank Statement Consolidation</h2>
+        </div>
+
+        <div class="actions">
+          <button id="refreshBtn" class="secondary-btn">Refresh Sheet Data</button>
+
+          <label class="upload-btn">
+            Upload Statement
+            <input id="fileInput" type="file" accept=".pdf,.csv,.xlsx,.xls" />
+          </label>
+        </div>
+      </header>
+
+      <section class="status-card" id="statusBox">
+        Ready. Upload a PDF, CSV, or Excel bank statement.
+      </section>
+
+      <section class="cards">
+        <div class="card">
+          <span>Total Banks</span>
+          <strong id="totalBanks">0</strong>
+        </div>
+
+        <div class="card">
+          <span>Total Accounts</span>
+          <strong id="totalAccounts">0</strong>
+        </div>
+
+        <div class="card highlight">
+          <span>Consolidated Balance</span>
+          <strong id="consolidatedBalance">R 0.00</strong>
+        </div>
+
+        <div class="card">
+          <span>Last Upload</span>
+          <strong id="lastUpload">-</strong>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h3>Historical Balance Lookup</h3>
+            <p>Select a date to view balances captured on that date.</p>
+          </div>
+
+          <div class="lookup">
+            <input type="date" id="historyDate" />
+            <button id="lookupBtn">Lookup</button>
+          </div>
+        </div>
+
+        <div id="historyResults" class="history-results"></div>
+      </section>
+
+      <section class="grid">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Consolidated Accounts</h3>
+              <p>Click each bank to view account details.</p>
+            </div>
+          </div>
+
+          <div id="banksContainer"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <h3>Recent Transactions</h3>
+              <p>Latest records uploaded to Google Sheets.</p>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Bank</th>
+                  <th>Account</th>
+                  <th>Holder</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
+              <tbody id="transactionsTable">
+                <tr>
+                  <td colspan="5" class="empty">No data loaded yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
