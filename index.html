@@ -67,6 +67,17 @@
     .report-card span{display:block;color:#64748b;font-size:13px;margin-bottom:8px}
     .report-card strong{font-size:22px}
     .section-title{margin:0 0 16px;font-size:22px}
+
+    .statement-transactions{margin-top:14px;border:1px solid #eef2f7;border-radius:14px;overflow:hidden}
+    .statement-transactions h5{margin:0;padding:12px 14px;background:#f8fafc;font-size:14px}
+    .statement-transactions .table-wrap{padding:0}
+    .statement-actions{margin-top:12px}
+    .small-btn{border:0;border-radius:10px;padding:9px 12px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer}
+    .muted-note{color:#64748b;font-size:13px;margin-top:10px}
+    .click-hint{color:#2563eb;font-size:12px;font-weight:700;margin-top:4px}
+    .tx-count-badge{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:999px;background:#dbeafe;color:#1e40af;font-size:12px;font-weight:700}
+    .statement-row td{background:#fff}
+    .transactions-table tr:hover{background:#f8fafc}
     @media(max-width:980px){.app{flex-direction:column}.sidebar{width:100%}.cards,.grid{grid-template-columns:1fr}.topbar,.panel-header{align-items:flex-start;flex-direction:column}}
 
     .login-overlay{position:fixed;inset:0;background:rgba(15,23,42,.92);display:flex;align-items:center;justify-content:center;z-index:9999}
@@ -409,20 +420,25 @@
       if (!file) return;
 
       try {
-        setStatus("Reading statement...");
+        setStatus("Reading statement and extracting line-by-line transactions...");
         const text = await extractText(file);
         const parsed = parseStatement(text, file.name);
+        const transactionRows = buildTransactionRows(parsed);
 
-        setStatus("Saving extracted statement data to Google Sheet named Bank...");
+        setStatus(`Saving statement summary and ${transactionRows.length} transaction line(s) to Google Sheets...`);
+
+        const summaryPayload = {
+          action: "append",
+          spreadsheetId: SPREADSHEET_ID,
+          sheetName: "Bank",
+          ...parsed,
+          transactions: JSON.stringify(parsed.transactions || []),
+          transactionCount: transactionRows.length
+        };
 
         const response = await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
-          body: JSON.stringify({
-            action: "append",
-            spreadsheetId: SPREADSHEET_ID,
-            sheetName: "Bank",
-            ...parsed
-          })
+          body: JSON.stringify(summaryPayload)
         });
 
         const resultText = await response.text();
@@ -438,13 +454,61 @@
           throw new Error(result.error || "Google Sheet save failed.");
         }
 
-        records.unshift(result.record || parsed);
+        await saveTransactionRows(transactionRows);
+
+        const savedRecord = { ...(result.record || parsed), transactions: parsed.transactions || [], transactionCount: transactionRows.length };
+        records.unshift(savedRecord);
         renderDashboard();
-        setStatus("Upload saved successfully to Google Sheet named Bank.", "success");
+        setStatus(`Upload saved successfully. ${transactionRows.length} line-by-line transaction(s) are available when you expand the statement.`, "success");
         fileInput.value = "";
       } catch (error) {
         console.error(error);
         setStatus(error.message, "error");
+      }
+    }
+
+    function buildTransactionRows(statement) {
+      const transactions = Array.isArray(statement.transactions) ? statement.transactions : [];
+      return transactions.map((tx, index) => ({
+        uploadId: statement.uploadId,
+        lineNumber: index + 1,
+        uploadedAt: statement.uploadedAt,
+        fileName: statement.fileName,
+        bankName: statement.bankName,
+        accountHolder: statement.accountHolder,
+        accountNumber: statement.accountNumber,
+        statementDate: statement.statementDate,
+        transactionDate: tx.date || statement.statementDate,
+        description: tx.description || "Bank transaction",
+        debit: tx.debit || "",
+        credit: tx.credit || "",
+        amount: tx.amount || "",
+        runningBalance: tx.runningBalance || "",
+        currency: statement.currency || "ZAR"
+      }));
+    }
+
+    async function saveTransactionRows(transactionRows) {
+      if (!transactionRows.length) return;
+
+      for (const row of transactionRows) {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "append",
+            spreadsheetId: SPREADSHEET_ID,
+            sheetName: "BankTransactions",
+            ...row
+          })
+        });
+
+        const resultText = await response.text();
+        try {
+          const result = JSON.parse(resultText);
+          if (result.success === false) throw new Error(result.error || "Transaction line save failed.");
+        } catch (error) {
+          if (String(resultText || "").toLowerCase().includes("error")) throw error;
+        }
       }
     }
 
@@ -464,7 +528,27 @@
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
         const page = await pdf.getPage(pageNumber);
         const content = await page.getTextContent();
-        fullText += content.items.map(item => item.str).join(" ") + "\n";
+
+        const rows = {};
+        content.items.forEach(item => {
+          const y = Math.round(item.transform[5]);
+          if (!rows[y]) rows[y] = [];
+          rows[y].push({ x: item.transform[4], text: item.str });
+        });
+
+        Object.keys(rows)
+          .sort((a, b) => Number(b) - Number(a))
+          .forEach(y => {
+            const line = rows[y]
+              .sort((a, b) => a.x - b.x)
+              .map(item => item.text)
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (line) fullText += line + "\n";
+          });
+
+        fullText += "\n";
       }
 
       return fullText;
@@ -491,9 +575,11 @@
       const accountNumber = detectAccountNumber(cleanText);
       const statementDate = detectStatementDate(cleanText);
       const balance = detectClosingBalance(cleanText);
+      const uploadId = "UPL-" + Date.now();
+      const transactions = extractStatementTransactions(text, statementDate);
 
       return {
-        uploadId: "UPL-" + Date.now(),
+        uploadId,
         uploadedAt: new Date().toISOString(),
         fileName,
         bankName,
@@ -501,12 +587,13 @@
         accountNumber,
         statementDate,
         transactionDate: statementDate,
-        description: "Statement upload",
+        description: transactions.length ? `${transactions.length} bank transaction(s) extracted` : "Statement upload",
         debit: "",
         credit: "",
         runningBalance: balance,
         closingBalance: balance,
-        currency: "ZAR"
+        currency: "ZAR",
+        transactions
       };
     }
 
@@ -584,6 +671,125 @@
       return numberString(amounts[amounts.length - 1]);
     }
 
+    function extractStatementTransactions(text, fallbackDate) {
+      const rawLines = text.split(/\r?\n/).map(line => line.replace(/\t/g, " ").trim()).filter(Boolean);
+      const mergedLines = mergeTransactionContinuationLines(rawLines);
+      const transactions = [];
+
+      mergedLines.forEach(line => {
+        const tx = parseTransactionLine(line, fallbackDate);
+        if (tx) transactions.push(tx);
+      });
+
+      return transactions.filter((tx, index, arr) => {
+        const key = `${tx.date}|${tx.description}|${tx.debit}|${tx.credit}|${tx.runningBalance}`;
+        return arr.findIndex(other => `${other.date}|${other.description}|${other.debit}|${other.credit}|${other.runningBalance}` === key) === index;
+      });
+    }
+
+    function mergeTransactionContinuationLines(lines) {
+      const dateAtStart = /^\s*(20\d{2}[-\/](?:0?[1-9]|1[0-2])[-\/](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-\/](?:0?[1-9]|1[0-2])[-\/](?:\d{2}|20\d{2})|(?:0?[1-9]|[12]\d|3[01])\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:\d{2}|20\d{2})?)\b/i;
+      const merged = [];
+
+      lines.forEach(line => {
+        const cleaned = line.replace(/\s+/g, " ").trim();
+        if (!cleaned) return;
+
+        if (dateAtStart.test(cleaned) || !merged.length) {
+          merged.push(cleaned);
+        } else if (hasMoney(cleaned) && hasDate(cleaned)) {
+          merged.push(cleaned);
+        } else if (merged.length && !/^(date|transaction|description|debit|credit|balance|amount)\b/i.test(cleaned)) {
+          merged[merged.length - 1] += " " + cleaned;
+        }
+      });
+
+      return merged;
+    }
+
+    function parseTransactionLine(line, fallbackDate) {
+      if (!hasDate(line) || !hasMoney(line)) return null;
+      if (/opening balance|closing balance|available balance|brought forward|carried forward|statement period|account number/i.test(line)) return null;
+
+      const dateMatch = line.match(getDatePattern());
+      if (!dateMatch) return null;
+
+      const moneyMatches = [...line.matchAll(getMoneyPattern())].map(match => ({ value: match[0], index: match.index }));
+      if (!moneyMatches.length) return null;
+
+      const normalizedDate = normalizeLooseDate(dateMatch[0], fallbackDate) || fallbackDate;
+      const amounts = moneyMatches.map(item => numberString(item.value.replace(/[Rr]/g, "")));
+      const amount = amounts[0] || "";
+      const runningBalance = amounts.length > 1 ? amounts[amounts.length - 1] : "";
+
+      let description = line
+        .replace(dateMatch[0], " ")
+        .replace(getMoneyPattern(), " ")
+        .replace(/[,;|]+/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+
+      description = description || "Bank transaction";
+
+      const lower = line.toLowerCase();
+      const firstAmountText = moneyMatches[0].value;
+      const isDebit = /^\s*-/.test(firstAmountText) || /\b(debit|dr|payment|purchase|fee|charge|withdrawal|transfer to|pos|atm)\b/i.test(lower);
+      const isCredit = /^\s*\+/.test(firstAmountText) || /\b(credit|cr|deposit|salary|interest|refund|transfer from|received)\b/i.test(lower);
+
+      return {
+        date: normalizedDate,
+        description,
+        debit: isDebit && !isCredit ? amount : "",
+        credit: !isDebit || isCredit ? amount : "",
+        amount,
+        runningBalance
+      };
+    }
+
+    function hasDate(value) {
+      return getDatePattern().test(value);
+    }
+
+    function hasMoney(value) {
+      return getMoneyPattern().test(value);
+    }
+
+    function getDatePattern() {
+      return /\b(20\d{2}[-\/](?:0?[1-9]|1[0-2])[-\/](?:0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-\/](?:0?[1-9]|1[0-2])[-\/](?:\d{2}|20\d{2})|(?:0?[1-9]|[12]\d|3[01])\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:\d{2}|20\d{2})?)\b/i;
+    }
+
+    function getMoneyPattern() {
+      return /[+-]?\s*R?\s*\d{1,3}(?:[ ,]\d{3})*(?:\.\d{2})|[+-]?\s*R?\s*\d+\.\d{2}/gi;
+    }
+
+    function normalizeLooseDate(value, fallbackDate = "") {
+      if (!value) return fallbackDate;
+      const monthMap = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+      const textDate = value.match(/(0?[1-9]|[12]\d|3[01])\s+([A-Za-z]{3,})\s*(\d{2}|20\d{2})?/);
+
+      if (textDate) {
+        const day = textDate[1];
+        const month = monthMap[textDate[2].slice(0, 3).toLowerCase()];
+        let year = textDate[3] || (fallbackDate ? String(fallbackDate).slice(0, 4) : String(new Date().getFullYear()));
+        if (year.length === 2) year = "20" + year;
+        if (month) return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+
+      const numericDate = value.match(/(20\d{2})[-\/](0?[1-9]|1[0-2])[-\/](0?[1-9]|[12]\d|3[01])|(?:0?[1-9]|[12]\d|3[01])[-\/](0?[1-9]|1[0-2])[-\/](\d{2}|20\d{2})/);
+      if (numericDate) {
+        const parts = value.replace(/\//g, "-").split("-").map(Number);
+        if (String(parts[0]).length === 4) {
+          const [y, m, d] = parts;
+          return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        }
+        let [d, m, y] = parts;
+        if (String(y).length === 2) y = 2000 + y;
+        return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      }
+
+      return fallbackDate;
+    }
+
     function cleanField(value) {
       return value.replace(/account|number|statement|date|balance/gi, "").replace(/\s{2,}/g, " ").trim().slice(0, 80);
     }
@@ -615,12 +821,53 @@
         if (!result.success) throw new Error(result.error || "Could not load sheet data.");
 
         records = result.records || [];
+        const transactionRows = await loadTransactionRows();
+        records = hydrateRecordsWithTransactionRows(records, transactionRows);
         renderDashboard();
         setStatus("Sheet data loaded successfully from Bank.", "success");
       } catch (error) {
         console.error(error);
         setStatus(error.message, "error");
       }
+    }
+
+    async function loadTransactionRows() {
+      try {
+        const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=list&sheetName=BankTransactions`);
+        const result = await response.json();
+        return result.success ? (result.records || []) : [];
+      } catch (error) {
+        console.warn("BankTransactions sheet could not be loaded yet.", error);
+        return [];
+      }
+    }
+
+    function hydrateRecordsWithTransactionRows(statementRecords, transactionRows) {
+      const grouped = {};
+
+      transactionRows.forEach(row => {
+        const uploadId = row.uploadId || row.UploadId || row["Upload ID"];
+        if (!uploadId) return;
+        if (!grouped[uploadId]) grouped[uploadId] = [];
+        grouped[uploadId].push({
+          date: row.transactionDate || row.date || row.statementDate || "",
+          description: row.description || "Bank transaction",
+          debit: row.debit || "",
+          credit: row.credit || "",
+          amount: row.amount || "",
+          runningBalance: row.runningBalance || row.balance || ""
+        });
+      });
+
+      return statementRecords.map(record => {
+        const parsedTransactions = parseStoredTransactions(record.transactions);
+        const sheetTransactions = grouped[record.uploadId] || [];
+        return {
+          ...record,
+          transactions: sheetTransactions.length ? sheetTransactions : parsedTransactions,
+          transactionCount: sheetTransactions.length || parsedTransactions.length || record.transactionCount || 0
+        };
+      });
     }
 
     async function lookupBalanceByDate() {
@@ -707,6 +954,7 @@
               <div class="detail-row"><span>Account Number</span><strong>${account.accountNumber || "Unknown"}</strong></div>
               <div class="detail-row"><span>Statement Date</span><strong>${account.statementDate || "-"}</strong></div>
               <div class="detail-row"><span>Running Balance</span><strong>${formatCurrency(account.runningBalance || account.closingBalance || 0)}</strong></div>
+              ${renderStatementTransactions(account)}
               <br>
             `).join("")}
           </div>
@@ -744,6 +992,7 @@
             <div class="detail-row"><span>Statement Date</span><strong>${account.statementDate || "-"}</strong></div>
             <div class="detail-row"><span>Upload Date</span><strong>${account.uploadedAt ? new Date(account.uploadedAt).toLocaleString() : "-"}</strong></div>
             <div class="detail-row"><span>Currency</span><strong>${account.currency || "ZAR"}</strong></div>
+            ${renderStatementTransactions(account)}
           </div>
         </div>
       `).join("");
@@ -762,17 +1011,29 @@
         return;
       }
 
-      table.innerHTML = rows.map(row => `
-        <tr>
+      table.innerHTML = rows.map((row, index) => {
+        const txCount = getStatementTransactions(row).length;
+        return `
+        <tr onclick="toggleStatementRow(${index})" style="cursor:pointer">
           <td>${row.uploadedAt ? new Date(row.uploadedAt).toLocaleDateString() : "-"}</td>
           <td>${row.statementDate || row.transactionDate || "-"}</td>
           <td>${row.bankName || "-"}</td>
           <td>${row.accountNumber || "-"}</td>
           <td>${row.accountHolder || "-"}</td>
-          <td>${row.description || "Statement upload"}</td>
+          <td>${row.description || "Statement upload"}<span class="tx-count-badge">${txCount} lines</span><div class="click-hint">Click to expand transactions</div></td>
           <td>${formatCurrency(row.runningBalance || row.closingBalance || 0)}</td>
         </tr>
-      `).join("");
+        <tr id="statement-row-${index}" class="statement-row" style="display:none">
+          <td colspan="7">${renderStatementTransactions(row)}</td>
+        </tr>
+      `;
+      }).join("");
+    }
+
+    function toggleStatementRow(index) {
+      const row = document.getElementById(`statement-row-${index}`);
+      if (!row) return;
+      row.style.display = row.style.display === "none" ? "table-row" : "none";
     }
 
     function renderReports(latestRecords) {
@@ -818,6 +1079,62 @@
       `).join("");
     }
 
+
+    function renderStatementTransactions(statement) {
+      const transactions = getStatementTransactions(statement);
+
+      if (!transactions.length) {
+        return `<div class="muted-note">No line-by-line bank transactions were found for this statement. Upload the statement again with this version so each line can be extracted and saved.</div>`;
+      }
+
+      return `
+        <div class="statement-transactions">
+          <h5>Bank Transactions for ${statement.fileName || "this statement"} <span class="tx-count-badge">${transactions.length} line(s)</span></h5>
+          <div class="table-wrap">
+            <table class="transactions-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Debit</th>
+                  <th>Credit</th>
+                  <th>Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${transactions.map(tx => `
+                  <tr>
+                    <td>${tx.date || statement.statementDate || "-"}</td>
+                    <td>${tx.description || "-"}</td>
+                    <td>${tx.debit ? formatCurrency(tx.debit) : "-"}</td>
+                    <td>${tx.credit ? formatCurrency(tx.credit) : "-"}</td>
+                    <td>${tx.runningBalance ? formatCurrency(tx.runningBalance) : "-"}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+
+    function getStatementTransactions(statement) {
+      if (!statement) return [];
+      if (Array.isArray(statement.transactions)) return statement.transactions;
+      return parseStoredTransactions(statement.transactions);
+    }
+
+    function parseStoredTransactions(value) {
+      if (!value) return [];
+      if (Array.isArray(value)) return value;
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
 
     function renderTransactions(rows) {
       const table = document.getElementById("transactionsTable");
