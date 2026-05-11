@@ -423,17 +423,27 @@
         setStatus("Reading statement and extracting line-by-line transactions...");
         const text = await extractText(file);
         const parsed = parseStatement(text, file.name);
-        const transactionRows = buildTransactionRows(parsed);
+        const dedupeResult = keepOnlyNewStatementTransactions(parsed);
+        const parsedToSave = dedupeResult.statement;
+        const transactionRows = buildTransactionRows(parsedToSave);
 
-        setStatus(`Saving statement summary and ${transactionRows.length} transaction line(s) to Google Sheets...`);
+        if (!transactionRows.length) {
+          setStatus(`No new transactions found. This statement already appears to be uploaded up to ${dedupeResult.lastSavedLabel}.`, "success");
+          fileInput.value = "";
+          return;
+        }
+
+        setStatus(`Saving ${transactionRows.length} new transaction line(s) to Google Sheets. ${dedupeResult.skippedCount} duplicate line(s) skipped.`);
 
         const summaryPayload = {
           action: "append",
           spreadsheetId: SPREADSHEET_ID,
           sheetName: "Bank",
-          ...parsed,
-          transactions: JSON.stringify(parsed.transactions || []),
-          transactionCount: transactionRows.length
+          ...parsedToSave,
+          transactions: JSON.stringify(parsedToSave.transactions || []),
+          transactionCount: transactionRows.length,
+          skippedDuplicateTransactions: dedupeResult.skippedCount,
+          lastSavedBeforeUpload: dedupeResult.lastSavedLabel
         };
 
         const response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -456,10 +466,10 @@
 
         await saveTransactionRows(transactionRows);
 
-        const savedRecord = { ...(result.record || parsed), transactions: parsed.transactions || [], transactionCount: transactionRows.length };
+        const savedRecord = { ...(result.record || parsedToSave), transactions: parsedToSave.transactions || [], transactionCount: transactionRows.length };
         records.unshift(savedRecord);
         renderDashboard();
-        setStatus(`Upload saved successfully. ${transactionRows.length} line-by-line transaction(s) are available when you expand the statement.`, "success");
+        setStatus(`Upload saved successfully. ${transactionRows.length} new line-by-line transaction(s) saved. ${dedupeResult.skippedCount} duplicate line(s) skipped.`, "success");
         fileInput.value = "";
       } catch (error) {
         console.error(error);
@@ -486,6 +496,81 @@
         runningBalance: tx.runningBalance || "",
         currency: statement.currency || "ZAR"
       }));
+    }
+
+
+    function keepOnlyNewStatementTransactions(statement) {
+      const newTransactions = Array.isArray(statement.transactions) ? statement.transactions : [];
+      const previousTransactions = getPreviousTransactionsForAccount(statement);
+      const lastSaved = previousTransactions[previousTransactions.length - 1] || null;
+      const lastSavedSignature = lastSaved ? transactionSignature(lastSaved) : "";
+      const lastSavedIndex = lastSavedSignature ? newTransactions.findIndex(tx => transactionSignature(tx) === lastSavedSignature) : -1;
+      let filteredTransactions;
+
+      if (lastSavedIndex >= 0) {
+        filteredTransactions = newTransactions.slice(lastSavedIndex + 1);
+      } else {
+        const existingSignatures = new Set(previousTransactions.map(transactionSignature));
+        filteredTransactions = newTransactions.filter(tx => !existingSignatures.has(transactionSignature(tx)));
+      }
+
+      const skippedCount = Math.max(0, newTransactions.length - filteredTransactions.length);
+      const lastSavedLabel = lastSaved ? `${lastSaved.date || "last saved line"} - ${lastSaved.description || "transaction"}` : "the beginning";
+
+      return {
+        statement: {
+          ...statement,
+          transactions: filteredTransactions,
+          description: filteredTransactions.length ? `${filteredTransactions.length} new bank transaction(s) extracted` : "No new transactions found"
+        },
+        skippedCount,
+        lastSavedLabel
+      };
+    }
+
+    function getPreviousTransactionsForAccount(statement) {
+      const accountKey = normalizeAccountKey(statement);
+      const matches = records.filter(record => normalizeAccountKey(record) === accountKey);
+      const rows = [];
+
+      matches.forEach(record => {
+        getStatementTransactions(record).forEach((tx, index) => {
+          rows.push({
+            ...tx,
+            _statementDate: record.statementDate || tx.date || "",
+            _uploadedAt: record.uploadedAt || "",
+            _lineNumber: Number(tx.lineNumber || index + 1) || index + 1
+          });
+        });
+      });
+
+      return rows.sort((a, b) => {
+        const dateA = new Date(a.date || a._statementDate || a._uploadedAt || 0).getTime();
+        const dateB = new Date(b.date || b._statementDate || b._uploadedAt || 0).getTime();
+        if (dateA !== dateB) return dateA - dateB;
+        return (a._lineNumber || 0) - (b._lineNumber || 0);
+      });
+    }
+
+    function normalizeAccountKey(value) {
+      return [
+        value.bankName || "",
+        value.accountNumber || "",
+        value.accountHolder || ""
+      ].map(item => String(item).trim().toUpperCase()).join("|");
+    }
+
+    function transactionSignature(tx) {
+      return [
+        tx.date || tx.transactionDate || "",
+        normalizeText(tx.description || ""),
+        numberString(tx.debit || tx.credit || tx.amount || "0"),
+        numberString(tx.runningBalance || "0")
+      ].join("|");
+    }
+
+    function normalizeText(value) {
+      return String(value).toLowerCase().replace(/\s+/g, " ").trim();
     }
 
     async function saveTransactionRows(transactionRows) {
